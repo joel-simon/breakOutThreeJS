@@ -1,0 +1,386 @@
+<html>
+<head>
+	<title>Breakout</title>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+	<link rel=stylesheet href="css/base.css"/>
+</head>
+<body>
+
+<div id="message"></div>
+
+<script src="js/Three.js"></script>
+<script src="js/Detector.js"></script>
+<script src="js/Stats.js"></script>
+<script src="js/OrbitControls.js"></script>
+<script src="js/THREEx.KeyboardState.js"></script>
+<script src="js/THREEx.FullScreen.js"></script>
+<script src="js/THREEx.WindowResize.js"></script>
+<script src="js/shaders/FresnelShader.js"></script>
+
+<!-- jQuery code to display an information button and box when clicked. -->
+<script src="js/jquery-1.9.1.js"></script>
+<script src="js/jquery-ui.js"></script>
+<link rel=stylesheet href="css/jquery-ui.css" />
+<link rel=stylesheet href="css/info.css"/>
+<script src="js/info.js"></script>
+<div id="infoButton"></div>
+<div id="infoBox" title="Breakout by Joel c: ">
+Controls:
+<ul>
+<li>Arrows to move in any direction!
+</ul>
+<br/>
+Destroy Joel in his own computer!
+<br/>
+
+<br/><br/>
+
+</div>
+<!-- ------------------------------------------------------------ -->
+
+<div id="ThreeJS" style="z-index: 2;"></div>
+<script>
+
+// MAIN
+
+// standard global variables
+var container, scene, camera, renderer, controls, stats;
+var Joel;
+var keyboard = new THREEx.KeyboardState();
+var clock = new THREE.Clock();
+// custom global variables
+
+var MovingCube;
+var Ball;
+var collidableMeshList = [];
+var game = {
+		width : 560,
+		height: 370,
+		depth: 200,
+		deaths: 0
+	}
+
+var arrowList = [];
+var directionList = [];
+
+init();
+animate();
+
+// FUNCTIONS 		
+function init() 
+{
+	// SCENE
+	scene = new THREE.Scene();
+	// CAMERA
+	var SCREEN_WIDTH = window.innerWidth, SCREEN_HEIGHT = window.innerHeight;
+	var VIEW_ANGLE = 60, ASPECT = SCREEN_WIDTH / SCREEN_HEIGHT, NEAR = 0.1, FAR = 20000;
+	camera = new THREE.PerspectiveCamera( VIEW_ANGLE, ASPECT, NEAR, FAR);
+	
+	scene.add(camera);
+	camera.position.set(0,250,500);
+	camera.lookAt(new THREE.Vector3(0, 150, 0));	
+	// RENDERER
+	if ( Detector.webgl )
+		renderer = new THREE.WebGLRenderer( {antialias:true} );
+	else
+		renderer = new THREE.CanvasRenderer(); 
+	renderer.setSize(SCREEN_WIDTH, SCREEN_HEIGHT);
+
+	container = document.getElementById( 'ThreeJS' );
+	container.appendChild( renderer.domElement );
+	// EVENTS
+	THREEx.WindowResize(renderer, camera);
+	THREEx.FullScreen.bindKey({ charCode : 'm'.charCodeAt(0) });
+	// CONTROLS
+	controls = new THREE.OrbitControls( camera, renderer.domElement );
+	controls.addEventListener( 'change', render );
+	// STATS
+	stats = new Stats();
+	stats.domElement.style.position = 'absolute';
+	stats.domElement.style.bottom = '0px';
+	stats.domElement.style.zIndex = 100;
+	container.appendChild( stats.domElement );
+	// LIGHT
+	var light = new THREE.PointLight(0xffffff);
+	light.position.set(100,250,100);
+	scene.add(light);
+	// FLOOR
+	// var floorMaterial = new THREE.MeshBasicMaterial( {color:0x444444, side:THREE.DoubleSide} );
+	// var floorGeometry = new THREE.PlaneGeometry(game.width, game.depth, 10, 10);
+	// var floor = new THREE.Mesh(floorGeometry, floorMaterial);
+	// floor.position.y = -0.5;
+	// floor.rotation.x = Math.PI / 2;
+	// scene.add(floor);
+
+	// SKYBOX
+	var imagePrefix = "images/dawnmountain-";
+	var directions  = ["xpos", "xneg", "ypos", "yneg", "zpos", "zneg"];
+	var imageSuffix = ".png";
+	var skyGeometry = new THREE.CubeGeometry( 5000, 5000, 5000 );	
+	
+	var urls = [];
+	for (var i = 0; i < 6; i++)
+		urls.push( imagePrefix + directions[i] + imageSuffix );
+	
+	var materialArray = [];
+	for (var i = 0; i < 6; i++)
+		materialArray.push( new THREE.MeshBasicMaterial({
+			map: THREE.ImageUtils.loadTexture( imagePrefix + directions[i] + imageSuffix ),
+			side: THREE.BackSide
+		}));
+	var skyMaterial = new THREE.MeshFaceMaterial( materialArray );
+	var skyBox = new THREE.Mesh( skyGeometry, skyMaterial );
+	scene.add( skyBox );
+	// SKYBOX/FOG
+	// var skyBoxGeometry = new THREE.CubeGeometry( 10000, 10000, 10000 );
+	// var skyBoxMaterial = new THREE.MeshBasicMaterial( { color: 0x9999ff, side: THREE.BackSide } );
+	// var skyBox = new THREE.Mesh( skyBoxGeometry, skyBoxMaterial );
+	// scene.add(skyBox);
+	
+	////////////
+	// CUSTOM //
+	////////////
+
+	var cubeGeometry = new THREE.CubeGeometry(100,10,30,1,1,1);
+	var wireMaterial = new THREE.MeshBasicMaterial( { color: 0xff0000, wireframe:true } );
+
+	var wallGeometry = new THREE.CubeGeometry( 20, 300, game.depth, 1, 1, 1 );
+	var wireMaterial = new THREE.MeshBasicMaterial( { color: 0x000000, wireframe:true } );
+	
+	MovingCube = new THREE.Mesh( cubeGeometry, new THREE.MeshPhongMaterial({
+
+        color: '#ff5555',
+        shininess: 10 
+      }) );
+	MovingCube.position.set(0, 10, 0);
+	MovingCube.name = 'paddle';
+	scene.add( MovingCube );	
+	collidableMeshList.push(MovingCube);
+
+
+	var loader = new THREE.JSONLoader();
+	
+	loader.load( "./headBasic.js", function( head, head_materials ) {
+		head.applyMatrix( new THREE.Matrix4().makeTranslation( 0, -180, 0 ) );
+			Joel = new THREE.Mesh(
+				head,
+				new THREE.MeshNormalMaterial({side: THREE.DoubleSide })
+				// new THREE.MeshFaceMaterial( head_materials )
+			);
+			Joel.scale = new THREE.Vector3( .6, .6, .6 );
+			
+			Joel.position.set(0,300,0);
+			Joel.rotation.set(Math.PI,0,0);
+			Joel.name = 'Joel';
+			// Joel.rotation.set(Math.random()*Math.PI*2, Math.random()*Math.PI*2, Math.random()*Math.PI*2);
+			console.log(Joel);
+			scene.add( Joel );
+			collidableMeshList.push(Joel);
+
+	});
+	loader.load( "./mac.js", function( mac, mac_materials ) {
+		// mac.applyMatrix( new THREE.Matrix4().makeTranslation( 0, -180, 0 ) );
+			Mac = new THREE.Mesh(
+				mac,
+				new THREE.MeshPhongMaterial({
+        // light
+        // specular: '#eeeeee',
+        // intermediate
+        color: '#eeeeee',
+        // dark
+        // emissive: '#eeeeee',
+        shininess: 10 
+      })
+				// new THREE.MeshFaceMaterial( head_materials )
+			);
+			Mac.scale.set(1,1.2,1);
+			Mac.position.set(0,-200,20);
+			Mac.overdraw = true;
+			// Mac.rotation.set(Math.PI,0,0);
+			Mac.name = 'Mac';
+			// Mac.rotation.set(Math.random()*Math.PI*2, Math.random()*Math.PI*2, Math.random()*Math.PI*2);
+			// console.log(Mac);
+			scene.add( Mac );
+			// collidableMeshList.push(Mac);
+
+	});
+	this.refractSphereCamera = new THREE.CubeCamera( 0.1, 5000, 512 );
+	scene.add( refractSphereCamera );
+
+	var fShader = THREE.FresnelShader;
+	
+	var fresnelUniforms = 
+	{
+		"mRefractionRatio": { type: "f", value: 1.02 },
+		"mFresnelBias": 	{ type: "f", value: 0.1 },
+		"mFresnelPower": 	{ type: "f", value: 2.0 },
+		"mFresnelScale": 	{ type: "f", value: 1.0 },
+		"tCube": 			{ type: "t", value: refractSphereCamera.renderTarget } //  textureCube }
+	};
+	
+	// create custom material for the shader
+	var customMaterial = new THREE.ShaderMaterial( 
+	{
+    uniforms: 		fresnelUniforms,
+		vertexShader:   fShader.vertexShader,
+		fragmentShader: fShader.fragmentShader
+	}   );
+	
+	var sphereGeometry = new THREE.SphereGeometry( 20, 16, 16);
+	Ball = new THREE.Mesh( sphereGeometry, customMaterial );
+	// Ball = this.sphere;
+	Ball.position.set(0, 0, 0);
+	Ball.name = 'Ball';
+	Ball.velocity = new THREE.Vector3(0, 0, 0);
+	console.log(Ball);
+	scene.add(Ball);
+	// collidableMeshList.push(Ball);
+	
+	refractSphereCamera.position = Ball.position;
+	
+}
+
+function clearText()
+{   document.getElementById('message').innerHTML = 'deaths:';   }
+
+function updateText()
+{   
+	document.getElementById('message').innerHTML = 'DEATHS: '+ game.deaths;
+}
+
+function appendText(txt)
+{   document.getElementById('message').innerHTML += txt;   }
+
+function animate() 
+{
+  requestAnimationFrame( animate );
+	render();		
+	update();
+}
+
+function update()
+{
+						// console.log(Ball.velocity.length());
+
+	var delta = clock.getDelta(); // seconds.
+	var moveDistance = 600 * delta; // 200 pixels per second
+	var rotateAngle = Math.PI / 2 * delta;   // pi/2 radians (90 degrees) per second
+	Joel.rotation.y += .6*rotateAngle;
+	// Joel.rotation.z += .7*rotateAngle;
+	Joel.rotation.x += .8*rotateAngle;
+
+	// if ( keyboard.pressed("A") )
+	// 	camera.position.x += 5;
+	// if ( keyboard.pressed("D") )
+	// 	camera.position.x -= 5;
+			
+	if ( keyboard.pressed("left") ) {
+		MovingCube.position.x -= moveDistance;
+			// camera.position.x -= 1;
+		}
+
+	if ( keyboard.pressed("right") ) {
+		MovingCube.position.x += moveDistance;
+			// camera.position.x += 1; 
+		}
+
+	if ( keyboard.pressed("up") )
+		MovingCube.position.y += moveDistance;
+	if ( keyboard.pressed("down") )
+		MovingCube.position.y -= moveDistance;
+	
+
+
+	Ball.position.y += 10*delta*Ball.velocity.y;
+	Ball.position.x += 10*delta*Ball.velocity.x;
+
+
+	if (Ball.position.x <= -game.width/2) {
+		Ball.velocity.x *= -1;
+		Ball.position.x = -game.width/2 +1;
+	} else if (Ball.position.x >= game.width/2) {
+		Ball.velocity.x *= -1;
+		Ball.position.x = game.width/2 -1;
+	}
+	if (Ball.position.y <= 0) {
+		game.deaths++;
+		updateText();
+		Ball.velocity.y *= -1;
+		Ball.position.y = 50;
+	} else if (Ball.position.y >= game.height) {
+		Ball.velocity.y *= -1;
+		Ball.position.y = game.height -1;
+	}
+
+	// collision detection:
+	//   determines if any of the rays from the cube's origin to each vertex
+	//		intersects any face of a mesh in the array of target meshes
+	//   for increased collision accuracy, add more vertices to the cube;
+	//		for example, new THREE.CubeGeometry( 64, 64, 64, 8, 8, 8, wireMaterial )
+	//   HOWEVER: when the origin of the ray is within the target mesh, collisions do not occur
+	var originPoint = Ball.position.clone();
+	camera.position.x = MovingCube.position.x/4;
+	camera.lookAt(new THREE.Vector3(0, 150, 0));
+	
+	for (var vertexIndex = 0; vertexIndex < Ball.geometry.vertices.length; vertexIndex++)
+	{		
+		var localVertex = Ball.geometry.vertices[vertexIndex].clone();
+		var globalVertex = localVertex.applyMatrix4( Ball.matrix );
+		var directionVector = globalVertex.sub( Ball.position );
+		
+		var ray = new THREE.Raycaster( originPoint, directionVector.clone().normalize() );
+		var collisionResults = ray.intersectObjects( collidableMeshList );
+		var collided;
+		var face;
+		if ( collisionResults.length > 0 && collisionResults[0].distance < directionVector.length() ){
+			// for (var i = 0; i < collisionResults.length; i++) {
+				collided = collisionResults[0].object.name;
+				// console.log(collisionResults[0]);
+				if (collided === 'paddle') {
+					Ball.velocity.y = 30;
+					Ball.velocity.x = ((Ball.position.x - MovingCube.position.x));
+				} else if (collided === 'Joel') {
+					// console.log(collisionResults[0]);
+					// Ball.velocity.y = -5;
+					face = collisionResults[0].faceIndex;
+					Ball.velocity = collisionResults[0].face.normal;
+					Joel.geometry.faces[face].a = 0;
+					Joel.geometry.faces[face].b = 0;
+					Joel.geometry.faces[face].c = 0;
+
+					Joel.geometry.verticesNeedUpdate = true;
+					Joel.geometry.elementsNeedUpdate = true;
+					Joel.geometry.morphTargetsNeedUpdate = true;
+					Joel.geometry.uvsNeedUpdate = true;
+					Joel.geometry.normalsNeedUpdate = true;
+					Joel.geometry.colorsNeedUpdate = true;
+					Joel.geometry.tangentsNeedUpdate = true;
+					break;
+					// Joel.geometry.faces[collisionResults[0].faceIndex]= null;
+				}
+			// };
+		}
+			// c(collisionResults)
+			// appendText(" Hit ");
+	}	
+
+	// controls.update();
+	Ball.velocity.setLength(40);
+
+	stats.update();
+}
+
+function render() 
+{
+	Ball.visible = false;
+	refractSphereCamera.updateCubeMap( renderer, scene );
+	Ball.visible = true;
+	
+	renderer.render( scene, camera );
+}
+
+</script>
+
+</body>
+</html>
