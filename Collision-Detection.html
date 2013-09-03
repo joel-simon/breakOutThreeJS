@@ -23,6 +23,11 @@
 <script src="js/jquery-ui.js"></script>
 <link rel=stylesheet href="css/jquery-ui.css" />
 <link rel=stylesheet href="css/info.css"/>
+<style type="text/css">
+#message {
+	text-align: center;
+}
+</style>
 <script src="js/info.js"></script>
 <div id="infoButton"></div>
 <div id="infoBox" title="Breakout by Joel c: ">
@@ -46,7 +51,7 @@ Destroy Joel in his own computer!
 
 // standard global variables
 var container, scene, camera, renderer, controls, stats;
-var Joel;
+var Joel, skyBox;
 var keyboard = new THREEx.KeyboardState();
 var clock = new THREE.Clock();
 // custom global variables
@@ -58,7 +63,8 @@ var game = {
 		width : 560,
 		height: 370,
 		depth: 200,
-		deaths: 0
+		deaths: 0,
+		facesOff: 0
 	}
 
 var arrowList = [];
@@ -114,24 +120,9 @@ function init()
 	// scene.add(floor);
 
 	// SKYBOX
-	var imagePrefix = "images/dawnmountain-";
-	var directions  = ["xpos", "xneg", "ypos", "yneg", "zpos", "zneg"];
-	var imageSuffix = ".png";
-	var skyGeometry = new THREE.CubeGeometry( 5000, 5000, 5000 );	
 	
-	var urls = [];
-	for (var i = 0; i < 6; i++)
-		urls.push( imagePrefix + directions[i] + imageSuffix );
-	
-	var materialArray = [];
-	for (var i = 0; i < 6; i++)
-		materialArray.push( new THREE.MeshBasicMaterial({
-			map: THREE.ImageUtils.loadTexture( imagePrefix + directions[i] + imageSuffix ),
-			side: THREE.BackSide
-		}));
-	var skyMaterial = new THREE.MeshFaceMaterial( materialArray );
-	var skyBox = new THREE.Mesh( skyGeometry, skyMaterial );
-	scene.add( skyBox );
+	generateSkyBox('moondust-');
+
 	// SKYBOX/FOG
 	// var skyBoxGeometry = new THREE.CubeGeometry( 10000, 10000, 10000 );
 	// var skyBoxMaterial = new THREE.MeshBasicMaterial( { color: 0x9999ff, side: THREE.BackSide } );
@@ -153,7 +144,7 @@ function init()
         color: '#ff5555',
         shininess: 10 
       }) );
-	MovingCube.position.set(0, 10, 0);
+	MovingCube.position.set(0, 0, 0);
 	MovingCube.name = 'paddle';
 	scene.add( MovingCube );	
 	collidableMeshList.push(MovingCube);
@@ -195,7 +186,7 @@ function init()
 				// new THREE.MeshFaceMaterial( head_materials )
 			);
 			Mac.scale.set(1,1.2,1);
-			Mac.position.set(0,-200,20);
+			Mac.position.set(0,-200,10);
 			Mac.overdraw = true;
 			// Mac.rotation.set(Math.PI,0,0);
 			Mac.name = 'Mac';
@@ -227,10 +218,10 @@ function init()
 		fragmentShader: fShader.fragmentShader
 	}   );
 	
-	var sphereGeometry = new THREE.SphereGeometry( 20, 16, 16);
+	var sphereGeometry = new THREE.SphereGeometry( 30, 16, 16);
 	Ball = new THREE.Mesh( sphereGeometry, customMaterial );
 	// Ball = this.sphere;
-	Ball.position.set(0, 0, 0);
+	Ball.position.set(0, 20, 0);
 	Ball.name = 'Ball';
 	Ball.velocity = new THREE.Vector3(0, 0, 0);
 	console.log(Ball);
@@ -240,13 +231,37 @@ function init()
 	refractSphereCamera.position = Ball.position;
 	
 }
-
+function generateSkyBox(prefix) {
+		if (skyBox) {scene.remove(skyBox)};
+		var imagePrefix = "images/"+prefix;//moondust-
+		// var imagePrefix = "images/dawnmountain-";
+		// var imagePrefix = "images/";
+		var directions  = ["xpos", "xneg", "ypos", "yneg", "zpos", "zneg"];
+		var imageSuffix = ".png";
+		var skyGeometry = new THREE.CubeGeometry( 3000, 2000, 3000 );	
+		
+		var urls = [];
+		for (var i = 0; i < 6; i++)
+			urls.push( imagePrefix + directions[i] + imageSuffix );
+		
+		var materialArray = [];
+		for (var i = 0; i < 6; i++)
+			materialArray.push( new THREE.MeshBasicMaterial({
+				map: THREE.ImageUtils.loadTexture( imagePrefix + directions[i] + imageSuffix ),
+				side: THREE.BackSide
+			}));
+		var skyMaterial = new THREE.MeshFaceMaterial( materialArray );
+		skyBox = new THREE.Mesh( skyGeometry, skyMaterial );
+		scene.add( skyBox );
+		skyBox.rotation.y = Math.random() * Math.PI *2;
+	}
 function clearText()
 {   document.getElementById('message').innerHTML = 'deaths:';   }
 
 function updateText()
 {   
-	document.getElementById('message').innerHTML = 'DEATHS: '+ game.deaths;
+	document.getElementById('message').innerHTML = 'DEATHS: '+ game.deaths + '<br>'+
+		'Faces Knocked Off: '+ game.facesOff+'/682';
 }
 
 function appendText(txt)
@@ -258,11 +273,28 @@ function animate()
 	render();		
 	update();
 }
+function handleLoss() {
+	game.deaths++;
+	updateText();
+	Ball.velocity.y *= -1;
+	Ball.position.y = 50;
+	switch(Math.floor(Math.random()*3)) {
+		case 0:
+			generateSkyBox('');
+			break;
+		case 1:
+			generateSkyBox('dawnmountain-');
+			break;
+		case 2:
+			generateSkyBox('moondust-');
+			break;
 
-function update()
-{
-						// console.log(Ball.velocity.length());
+	}
+	
+}
 
+updateText();
+function update() {
 	var delta = clock.getDelta(); // seconds.
 	var moveDistance = 600 * delta; // 200 pixels per second
 	var rotateAngle = Math.PI / 2 * delta;   // pi/2 radians (90 degrees) per second
@@ -270,26 +302,37 @@ function update()
 	// Joel.rotation.z += .7*rotateAngle;
 	Joel.rotation.x += .8*rotateAngle;
 
-	// if ( keyboard.pressed("A") )
-	// 	camera.position.x += 5;
-	// if ( keyboard.pressed("D") )
-	// 	camera.position.x -= 5;
-			
-	if ( keyboard.pressed("left") ) {
+	if(keyboard.pressed('1')){
+		generateSkyBox('dawnmountain-');
+				// var imagePrefix = "images/dawnmountain-";
+		// var imagePrefix = "images/";
+	} else if (keyboard.pressed('2')){
+		generateSkyBox('moondust-');
+
+				// var imagePrefix = "images/dawnmountain-";
+		// var imagePrefix = "images/";
+	} else if (keyboard.pressed('3')){
+		generateSkyBox('');
+				// var imagePrefix = "images/dawnmountain-";
+		// var imagePrefix = "images/";
+	}
+
+	if ( keyboard.pressed("left") && MovingCube.position.x > -game.width/2 +40) {
 		MovingCube.position.x -= moveDistance;
 			// camera.position.x -= 1;
 		}
 
-	if ( keyboard.pressed("right") ) {
+	if ( keyboard.pressed("right") && MovingCube.position.x < game.width/2 -40) {
 		MovingCube.position.x += moveDistance;
 			// camera.position.x += 1; 
 		}
 
-	if ( keyboard.pressed("up") )
+	if ( keyboard.pressed("up") && MovingCube.position.y < game.height)
 		MovingCube.position.y += moveDistance;
-	if ( keyboard.pressed("down") )
+	if ( keyboard.pressed("down") && MovingCube.position.y > 0)
 		MovingCube.position.y -= moveDistance;
 	
+
 
 
 	Ball.position.y += 10*delta*Ball.velocity.y;
@@ -304,10 +347,8 @@ function update()
 		Ball.position.x = game.width/2 -1;
 	}
 	if (Ball.position.y <= 0) {
-		game.deaths++;
-		updateText();
-		Ball.velocity.y *= -1;
-		Ball.position.y = 50;
+		handleLoss()
+
 	} else if (Ball.position.y >= game.height) {
 		Ball.velocity.y *= -1;
 		Ball.position.y = game.height -1;
@@ -349,6 +390,8 @@ function update()
 					Joel.geometry.faces[face].b = 0;
 					Joel.geometry.faces[face].c = 0;
 
+					game.facesOff++;
+
 					Joel.geometry.verticesNeedUpdate = true;
 					Joel.geometry.elementsNeedUpdate = true;
 					Joel.geometry.morphTargetsNeedUpdate = true;
@@ -356,16 +399,19 @@ function update()
 					Joel.geometry.normalsNeedUpdate = true;
 					Joel.geometry.colorsNeedUpdate = true;
 					Joel.geometry.tangentsNeedUpdate = true;
+					
 					break;
 					// Joel.geometry.faces[collisionResults[0].faceIndex]= null;
 				}
 			// };
 		}
+
 			// c(collisionResults)
 			// appendText(" Hit ");
 	}	
-
+	updateText();
 	// controls.update();
+	Ball.velocity.z = 0;
 	Ball.velocity.setLength(40);
 
 	stats.update();
